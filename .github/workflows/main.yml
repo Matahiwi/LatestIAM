@@ -1,0 +1,143 @@
+# Public repo with 2 environments: dev and prod
+# Each environment has the same 3 variables: 
+
+name: Play Terraform and workflow_dispatch menus
+on:
+  workflow_dispatch:
+    inputs:
+      action:         # drops a menu with apply and destroy as options
+        type: choice
+        description: 'Terraform action to perform'
+        required: true
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:      # permissions stanza used to connect to aws using sts tokens for temporary credentials
+  id-token: write # This is required for requesting the JWT (Fetch an OpenID Connect (OIDC) token)
+  contents: read  # This is required for actions/checkout, Work with the contents of the repository.
+
+jobs:
+  terraform_plan:
+    if: inputs.action == 'plan'
+    strategy:
+      matrix:
+        env: [ prod, dev ] 
+        #env: [ prod, prod-us, prod-eu, dev, identity ] # GitHub Action environments
+    runs-on: ubuntu-latest
+    environment: "${{ matrix.env }}"  # use github environment from the matrix array environment val
+
+    steps:
+      - name: Clone the Repo
+        uses: actions/checkout@v3
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: Assume AWS Account IAM Role
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: "${{ matrix.env }}-planning"
+
+      - name: Running Terraform Plan
+        run: |
+          if [ "${{ matrix.env }}" == "prod" ]; then
+              cd prod
+              rm -rf .terraform
+          else
+              cd terraform
+              rm -rf .terraform
+          fi
+
+          terraform_plan=${{ matrix.env }}.plan
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          terraform plan -out=/tmp/$terraform_plan
+          aws s3 cp /tmp/$terraform_plan s3://${{ vars.S3_BUCKET }}/iam_test/
+
+  terraform_apply:
+    if: inputs.action == 'apply'
+    strategy:
+      matrix:
+        env: [ prod, dev ]  
+        #env: [ prod, prod-us, prod-eu, dev, identity ] # GitHub Action environments
+    runs-on: ubuntu-latest
+    environment: "${{ matrix.env }}"  # use github environment from the matrix array value
+
+    steps:
+      - name: Clone the Repo
+        uses: actions/checkout@v3
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: Assume AWS Account IAM Role
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: "${{ matrix.env }}-applying"
+
+      - name: Running Terraform Apply
+        run: |
+          if [ "${{ matrix.env }}" == "prod" ]; then
+              cd prod
+              rm -rf .terraform
+          else
+              cd terraform
+              rm -rf .terraform
+          fi
+
+          terraform_plan=${{ matrix.env }}.plan
+          aws s3 cp s3://${{ vars.S3_BUCKET }}/iam_test/$terraform_plan /tmp/$terraform_plan
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          terraform apply -input=false /tmp/$terraform_plan
+
+
+  terraform_destroy:
+    if: inputs.action == 'destroy'
+    strategy:
+      matrix:
+        env: [ prod, dev ]  
+        #env: [ prod, prod-us, prod-eu, dev, identity ] # GitHub Action environments
+    runs-on: ubuntu-latest
+    environment: "${{ matrix.env }}"  # use github environment from the matrix array value
+
+    steps:
+      - name: Clone the Repo
+        uses: actions/checkout@v3
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: Assume AWS Account IAM Role
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: "${{ matrix.env }}-applying"
+
+      - name: Running Terraform Destroy
+        run: |
+          if [ "${{ matrix.env }}" == "prod" ]; then
+              cd prod
+              rm -rf .terraform
+          else
+              cd terraform
+              rm -rf .terraform
+          fi
+
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          terraform destroy -auto-approve
+
+
+
+
