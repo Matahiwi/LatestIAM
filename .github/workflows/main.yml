@@ -55,9 +55,9 @@ jobs:
           fi
 
           terraform_plan=${{ matrix.env }}.plan
-          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_latest/${{ matrix.env }}.tfstate
           terraform plan -out=/tmp/$terraform_plan
-          aws s3 cp /tmp/$terraform_plan s3://${{ vars.S3_BUCKET }}/iam_test/
+          aws s3 cp /tmp/$terraform_plan s3://${{ vars.S3_BUCKET }}/iam_latest/
 
   terraform_apply:
     if: inputs.action == 'apply'
@@ -95,8 +95,8 @@ jobs:
           fi
 
           terraform_plan=${{ matrix.env }}.plan
-          aws s3 cp s3://${{ vars.S3_BUCKET }}/iam_test/$terraform_plan /tmp/$terraform_plan
-          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          aws s3 cp s3://${{ vars.S3_BUCKET }}/iam_latest/$terraform_plan /tmp/$terraform_plan
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_latest/${{ matrix.env }}.tfstate
           terraform apply -input=false /tmp/$terraform_plan
 
 
@@ -135,7 +135,7 @@ jobs:
               rm -rf .terraform
           fi
 
-          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_test/${{ matrix.env }}.tfstate
+          terraform init -backend-config=bucket=${{ vars.S3_BUCKET }} -backend-config=key=iam_latest/${{ matrix.env }}.tfstate
           terraform destroy -auto-approve
 
 
